@@ -1,4 +1,4 @@
-# go_video_subs
+# Management Video Subscription
 
 REST API sederhana untuk manajemen video berbasis tier subscription, dibangun dengan Go dan Clean Architecture.
 
