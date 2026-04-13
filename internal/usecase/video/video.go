@@ -2,14 +2,11 @@ package video
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/go_video_subs/internal/domain/subscription"
 	"github.com/go_video_subs/internal/domain/video"
 )
-
-var ErrNoActiveSubscription = errors.New("no active subscription found")
 
 var tierHierarchy = map[subscription.Tier][]string{
 	subscription.TierGold:   {"gold", "silver", "bronze"},
@@ -18,28 +15,22 @@ var tierHierarchy = map[subscription.Tier][]string{
 }
 
 type UseCase struct {
-	subRepo   subscription.Repository
 	videoRepo video.Repository
 }
 
-func New(subRepo subscription.Repository, videoRepo video.Repository) *UseCase {
-	return &UseCase{subRepo: subRepo, videoRepo: videoRepo}
+func New(videoRepo video.Repository) *UseCase {
+	return &UseCase{videoRepo: videoRepo}
 }
 
-func (uc *UseCase) GetVideosByUserTier(ctx context.Context, userID uint64) ([]video.Video, error) {
-	sub, err := uc.subRepo.FindActiveByUserID(ctx, userID)
-	if err != nil {
-		return nil, ErrNoActiveSubscription
-	}
-
-	allowedTiers, ok := tierHierarchy[sub.Tier]
+func (uc *UseCase) GetVideosByTier(ctx context.Context, tier subscription.Tier) ([]video.Video, error) {
+	allowedTiers, ok := tierHierarchy[tier]
 	if !ok {
-		return nil, fmt.Errorf("usecase: unknown subscription tier: %s", sub.Tier)
+		return nil, fmt.Errorf("usecase: unknown subscription tier: %s", tier)
 	}
 
 	videos, err := uc.videoRepo.FindByTiers(ctx, allowedTiers)
 	if err != nil {
-		return nil, fmt.Errorf("usecase: get videos by user tier: %w", err)
+		return nil, fmt.Errorf("usecase: get videos by tier: %w", err)
 	}
 
 	return videos, nil

@@ -3,6 +3,8 @@ package router
 import (
 	"github.com/go_video_subs/internal/delivery/http/handler"
 	"github.com/go_video_subs/internal/delivery/http/middleware"
+	domainSub "github.com/go_video_subs/internal/domain/subscription"
+	"github.com/go_video_subs/pkg/response"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/logger"
 	"github.com/gofiber/fiber/v3/middleware/recover"
@@ -14,6 +16,7 @@ type Handlers struct {
 	Video   *handler.VideoHandler
 	Payment *handler.PaymentHandler
 
+	SubRepo   domainSub.Repository
 	JWTSecret string
 }
 
@@ -24,10 +27,7 @@ func New(h *Handlers) *fiber.App {
 			if e, ok := err.(*fiber.Error); ok {
 				code = e.Code
 			}
-			return c.Status(code).JSON(fiber.Map{
-				"success": false,
-				"error":   err.Error(),
-			})
+			return c.Status(code).JSON(response.Fail(err.Error()))
 		},
 	})
 
@@ -38,10 +38,7 @@ func New(h *Handlers) *fiber.App {
 	}))
 
 	app.Get("/health", func(c fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"status":  "ok",
-			"message": "server is running",
-		})
+		return c.JSON(response.OK("server is running"))
 	})
 
 	v1 := app.Group("/api/v1")
@@ -52,7 +49,10 @@ func New(h *Handlers) *fiber.App {
 	users := v1.Group("/users")
 	users.Post("/", h.User.Create)
 
-	videos := v1.Group("/videos", middleware.Auth(h.JWTSecret))
+	videos := v1.Group("/videos",
+		middleware.Auth(h.JWTSecret),
+		middleware.RequireSubscription(h.SubRepo),
+	)
 	videos.Get("/", h.Video.GetVideos)
 
 	payments := v1.Group("/payments")

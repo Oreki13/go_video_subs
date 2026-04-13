@@ -38,7 +38,7 @@ go_video_subs/
 │   └── delivery/
 │       └── http/
 │           ├── handler/        # Request/response handling (Fiber)
-│           ├── middleware/     # JWT auth middleware
+│           ├── middleware/     # JWT auth & subscription tier middleware
 │           └── router/         # Definisi route
 ├── pkg/
 │   ├── database/               # Koneksi MariaDB

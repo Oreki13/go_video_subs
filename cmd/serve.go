@@ -46,7 +46,7 @@ var serveCmd = &cobra.Command{
 		paymentRepo := repoPayment.New(db)
 
 		userUC := ucUser.New(userRepo, cfg.JWT.Secret, cfg.JWT.ExpiryHours)
-		videoUC := ucVideo.New(subRepo, videoRepo)
+		videoUC := ucVideo.New(videoRepo)
 		paymentUC := ucPayment.New(paymentRepo, planRepo, subRepo)
 
 		app := router.New(&router.Handlers{
@@ -54,6 +54,7 @@ var serveCmd = &cobra.Command{
 			Auth:      handler.NewAuthHandler(userUC),
 			Video:     handler.NewVideoHandler(videoUC),
 			Payment:   handler.NewPaymentHandler(paymentUC),
+			SubRepo:   subRepo,
 			JWTSecret: cfg.JWT.Secret,
 		})
 

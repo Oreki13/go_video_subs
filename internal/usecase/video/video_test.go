@@ -12,8 +12,8 @@ import (
 )
 
 // newTestUseCase adalah helper untuk membuat UseCase dengan mock yang diberikan.
-func newTestUseCase(subRepo *mockSubRepo, videoRepo *mockVideoRepo) *UseCase {
-	return New(subRepo, videoRepo)
+func newTestUseCase(videoRepo *mockVideoRepo) *UseCase {
+	return New(videoRepo)
 }
 
 // fakeVideos adalah data dummy video untuk dipakai antar test.
@@ -24,17 +24,11 @@ var fakeVideos = []domainVideo.Video{
 }
 
 // =============================================================================
-// GetVideosByUserTier – Happy Path berdasarkan tier
+// GetVideosByTier – Happy Path berdasarkan tier
 // =============================================================================
 
-func TestGetVideosByUserTier_GoldUser_CanAccessAllTiers(t *testing.T) {
+func TestGetVideosByTier_GoldUser_CanAccessAllTiers(t *testing.T) {
 	// User Gold harus bisa mengakses konten gold, silver, DAN bronze.
-	subRepo := &mockSubRepo{
-		FindActiveByUserIDFn: func(ctx context.Context, userID uint64) (*domainSub.Subscription, error) {
-			assert.Equal(t, uint64(1), userID)
-			return &domainSub.Subscription{UserID: 1, Tier: domainSub.TierGold}, nil
-		},
-	}
 	videoRepo := &mockVideoRepo{
 		FindByTiersFn: func(ctx context.Context, tiers []string) ([]domainVideo.Video, error) {
 			// Pastikan ketiga tier dikirim ke repository
@@ -43,20 +37,15 @@ func TestGetVideosByUserTier_GoldUser_CanAccessAllTiers(t *testing.T) {
 		},
 	}
 
-	uc := newTestUseCase(subRepo, videoRepo)
-	videos, err := uc.GetVideosByUserTier(context.Background(), 1)
+	uc := newTestUseCase(videoRepo)
+	videos, err := uc.GetVideosByTier(context.Background(), domainSub.TierGold)
 
 	require.NoError(t, err)
 	assert.Len(t, videos, 3)
 }
 
-func TestGetVideosByUserTier_SilverUser_CanAccessSilverAndBronze(t *testing.T) {
+func TestGetVideosByTier_SilverUser_CanAccessSilverAndBronze(t *testing.T) {
 	// User Silver hanya bisa akses silver dan bronze, tidak bisa gold.
-	subRepo := &mockSubRepo{
-		FindActiveByUserIDFn: func(ctx context.Context, userID uint64) (*domainSub.Subscription, error) {
-			return &domainSub.Subscription{UserID: 1, Tier: domainSub.TierSilver}, nil
-		},
-	}
 	videoRepo := &mockVideoRepo{
 		FindByTiersFn: func(ctx context.Context, tiers []string) ([]domainVideo.Video, error) {
 			assert.ElementsMatch(t, []string{"silver", "bronze"}, tiers)
@@ -65,20 +54,15 @@ func TestGetVideosByUserTier_SilverUser_CanAccessSilverAndBronze(t *testing.T) {
 		},
 	}
 
-	uc := newTestUseCase(subRepo, videoRepo)
-	videos, err := uc.GetVideosByUserTier(context.Background(), 1)
+	uc := newTestUseCase(videoRepo)
+	videos, err := uc.GetVideosByTier(context.Background(), domainSub.TierSilver)
 
 	require.NoError(t, err)
 	assert.Len(t, videos, 2)
 }
 
-func TestGetVideosByUserTier_BronzeUser_CanOnlyAccessBronze(t *testing.T) {
+func TestGetVideosByTier_BronzeUser_CanOnlyAccessBronze(t *testing.T) {
 	// User Bronze hanya bisa akses bronze.
-	subRepo := &mockSubRepo{
-		FindActiveByUserIDFn: func(ctx context.Context, userID uint64) (*domainSub.Subscription, error) {
-			return &domainSub.Subscription{UserID: 1, Tier: domainSub.TierBronze}, nil
-		},
-	}
 	videoRepo := &mockVideoRepo{
 		FindByTiersFn: func(ctx context.Context, tiers []string) ([]domainVideo.Video, error) {
 			assert.Equal(t, []string{"bronze"}, tiers)
@@ -86,72 +70,56 @@ func TestGetVideosByUserTier_BronzeUser_CanOnlyAccessBronze(t *testing.T) {
 		},
 	}
 
-	uc := newTestUseCase(subRepo, videoRepo)
-	videos, err := uc.GetVideosByUserTier(context.Background(), 1)
+	uc := newTestUseCase(videoRepo)
+	videos, err := uc.GetVideosByTier(context.Background(), domainSub.TierBronze)
 
 	require.NoError(t, err)
 	assert.Len(t, videos, 1)
 }
 
-func TestGetVideosByUserTier_ReturnsEmptyList_WhenNoVideosFound(t *testing.T) {
+func TestGetVideosByTier_ReturnsEmptyList_WhenNoVideosFound(t *testing.T) {
 	// Subscription valid tapi belum ada video yang di-upload.
-	subRepo := &mockSubRepo{
-		FindActiveByUserIDFn: func(ctx context.Context, userID uint64) (*domainSub.Subscription, error) {
-			return &domainSub.Subscription{UserID: 1, Tier: domainSub.TierGold}, nil
-		},
-	}
 	videoRepo := &mockVideoRepo{
 		FindByTiersFn: func(ctx context.Context, tiers []string) ([]domainVideo.Video, error) {
 			return []domainVideo.Video{}, nil
 		},
 	}
 
-	uc := newTestUseCase(subRepo, videoRepo)
-	videos, err := uc.GetVideosByUserTier(context.Background(), 1)
+	uc := newTestUseCase(videoRepo)
+	videos, err := uc.GetVideosByTier(context.Background(), domainSub.TierGold)
 
 	require.NoError(t, err)
 	assert.Empty(t, videos, "Harus return slice kosong, bukan error")
 }
 
 // =============================================================================
-// GetVideosByUserTier – Error Path
+// GetVideosByTier – Error Path
 // =============================================================================
 
-func TestGetVideosByUserTier_NoActiveSubscription(t *testing.T) {
-	// User belum subscribe atau subscription sudah expired.
-	subRepo := &mockSubRepo{
-		FindActiveByUserIDFn: func(ctx context.Context, userID uint64) (*domainSub.Subscription, error) {
-			return nil, errors.New("record not found")
-		},
-	}
+func TestGetVideosByTier_UnknownTier_ReturnsError(t *testing.T) {
+	// Tier tidak dikenal harus return error (bukan panic).
+	uc := newTestUseCase(&mockVideoRepo{})
+	videos, err := uc.GetVideosByTier(context.Background(), domainSub.Tier("platinum"))
 
-	uc := newTestUseCase(subRepo, &mockVideoRepo{})
-	videos, err := uc.GetVideosByUserTier(context.Background(), 99)
-
-	// Usecase harus mengembalikan ErrNoActiveSubscription (bukan expose error internal DB)
-	assert.ErrorIs(t, err, ErrNoActiveSubscription)
+	assert.Error(t, err)
 	assert.Nil(t, videos)
+	assert.Contains(t, err.Error(), "unknown subscription tier")
 }
 
-func TestGetVideosByUserTier_VideoRepoError(t *testing.T) {
-	// Subscription valid tapi query video ke DB gagal.
-	subRepo := &mockSubRepo{
-		FindActiveByUserIDFn: func(ctx context.Context, userID uint64) (*domainSub.Subscription, error) {
-			return &domainSub.Subscription{UserID: 1, Tier: domainSub.TierGold}, nil
-		},
-	}
+func TestGetVideosByTier_VideoRepoError(t *testing.T) {
+	// Tier valid tapi query video ke DB gagal.
 	videoRepo := &mockVideoRepo{
 		FindByTiersFn: func(ctx context.Context, tiers []string) ([]domainVideo.Video, error) {
 			return nil, errors.New("db connection timeout")
 		},
 	}
 
-	uc := newTestUseCase(subRepo, videoRepo)
-	videos, err := uc.GetVideosByUserTier(context.Background(), 1)
+	uc := newTestUseCase(videoRepo)
+	videos, err := uc.GetVideosByTier(context.Background(), domainSub.TierGold)
 
 	assert.Error(t, err)
 	assert.Nil(t, videos)
-	assert.Contains(t, err.Error(), "get videos by user tier")
+	assert.Contains(t, err.Error(), "get videos by tier")
 }
 
 // =============================================================================
